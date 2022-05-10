@@ -14,6 +14,7 @@ import { AuthModule } from './auth/auth.module';
       password: 'localdev',
       database: 'task-management',
       autoLoadEntities: true,
+      // do not use on production environment or you could lose data
       synchronize: true,
     }),
     AuthModule,
