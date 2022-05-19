@@ -1,5 +1,6 @@
 import {
   Body,
+  ClassSerializerInterceptor,
   Controller,
   Delete,
   Get,
@@ -9,6 +10,7 @@ import {
   Post,
   Query,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { GetUser } from 'src/auth/get-user.decorator';
@@ -44,6 +46,7 @@ export class TasksController {
     return this.tasksService.getTaskById(id, user);
   }
 
+  @UseInterceptors(ClassSerializerInterceptor)
   @Post()
   createTask(
     @Body() createTaskDto: CreateTaskDto,
