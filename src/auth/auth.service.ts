@@ -4,35 +4,26 @@ import {
   InternalServerErrorException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { AuthCredentialsDto } from './dto/auth-credentials.dto';
-import { User } from './user.entity';
 import * as bcrypt from 'bcrypt';
 import { JwtService } from '@nestjs/jwt';
 import { JwtPayload } from './jwt-payload.interface';
+import { PrismaService } from 'src/prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class AuthService {
-  constructor(
-    @InjectRepository(User)
-    private usersRepository: Repository<User>,
-    private jwtService: JwtService,
-  ) {}
+  constructor(private prisma: PrismaService, private jwtService: JwtService) {}
 
-  async signUp(authCredentialsDto: AuthCredentialsDto): Promise<void> {
-    const { username, password } = authCredentialsDto;
-
+  async signUp({ username, password }: Prisma.UserCreateInput): Promise<void> {
     const salt = await bcrypt.genSalt();
     const hashedPassword = await bcrypt.hash(password, salt);
 
     // TODO move to repository as createUser method
-    const user = this.usersRepository.create({
-      username,
-      password: hashedPassword,
-    });
     try {
-      await this.usersRepository.save(user);
+      await this.prisma.user.create({
+        data: { username, password: hashedPassword },
+      });
     } catch (error) {
       // duplicate username
       if (error.code === '23505') {
@@ -47,7 +38,7 @@ export class AuthService {
     authCredentialsDto: AuthCredentialsDto,
   ): Promise<{ accessToken: string }> {
     const { username, password } = authCredentialsDto;
-    const user = await this.usersRepository.findOneBy({ username });
+    const user = await this.prisma.user.findUnique({ where: { username } });
 
     if (user && (await bcrypt.compare(password, user.password))) {
       const payload: JwtPayload = { username };

@@ -7,41 +7,44 @@ import {
 import { TaskStatus } from './task-status.enum';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { GetTasksFilterDto } from './dto/get-tasks-filter.dto';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Task } from './task.entity';
-import { Repository } from 'typeorm';
-import { User } from 'src/auth/user.entity';
+import { User, Task, Prisma } from '@prisma/client';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class TasksService {
   private logger = new Logger('TasksService', { timestamp: true });
 
-  constructor(
-    @InjectRepository(Task)
-    private tasksRepository: Repository<Task>,
-  ) {}
+  constructor(private prisma: PrismaService) {}
 
   async getTasks(filterDto: GetTasksFilterDto, user: User): Promise<Task[]> {
     const { status, search } = filterDto;
 
     // TODO move query logic to custom repository
-    const query = this.tasksRepository.createQueryBuilder('task');
-
-    query.where({ user });
+    const query: Prisma.TaskFindManyArgs = { where: { user } };
 
     if (status) {
-      query.andWhere('task.status = :status', { status });
+      query.where.status = status;
     }
 
     if (search) {
-      query.andWhere(
-        '(LOWER(task.title) LIKE :search OR LOWER(task.description) LIKE :search)',
-        { search: `%${search.toLowerCase()}%` },
-      );
+      query.where.OR = [
+        {
+          title: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+        {
+          description: {
+            contains: search,
+            mode: 'insensitive',
+          },
+        },
+      ];
     }
 
     try {
-      return await query.getMany();
+      return await this.prisma.task.findMany(query);
     } catch (error) {
       this.logger.error(
         `Failed to get tasks for user "${
@@ -54,7 +57,9 @@ export class TasksService {
   }
 
   async getTaskById(id: string, user: User): Promise<Task> {
-    const task = await this.tasksRepository.findOneBy({ id, user });
+    const task = await this.prisma.task.findFirst({
+      where: { id, user },
+    });
 
     if (!task) {
       throw new NotFoundException(`Task with id "${id}" not found`);
@@ -63,22 +68,15 @@ export class TasksService {
     return task;
   }
 
-  async createTask(createTaskDto: CreateTaskDto, user: User): Promise<Task> {
+  createTask(createTaskDto: CreateTaskDto, user: User): Promise<Task> {
     const { title, description } = createTaskDto;
 
     /* TODO
-      I should probably move this create logic to a custom repository,
-      but nestjs is currently transitioning to typeorm v0.3 and the way to create custom
-      repositories right now is deprecated
+      I should probably move this create logic to a custom repository
     */
-    const task = this.tasksRepository.create({
-      title,
-      description,
-      status: TaskStatus.OPEN,
-      user,
+    return this.prisma.task.create({
+      data: { title, description, userId: user.id },
     });
-
-    return await this.tasksRepository.save(task);
   }
 
   async updateTaskStatus(
@@ -88,15 +86,17 @@ export class TasksService {
   ): Promise<Task> {
     const task = await this.getTaskById(id, user);
 
-    task.status = status;
-    return this.tasksRepository.save(task);
+    return this.prisma.task.update({
+      where: { id: task.id },
+      data: { status },
+    });
   }
 
   async deleteTask(id: string, user: User): Promise<void> {
-    const result = await this.tasksRepository.delete({ id, user });
+    const task = await this.getTaskById(id, user);
 
-    if (result.affected === 0) {
-      throw new NotFoundException(`Task with id "${id}" not found`);
-    }
+    await this.prisma.task.delete({
+      where: { id: task.id },
+    });
   }
 }

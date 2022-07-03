@@ -1,13 +1,12 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from 'src/auth/auth.module';
-import { Task } from './task.entity';
+import { PrismaService } from 'src/prisma/prisma.service';
 import { TasksController } from './tasks.controller';
 import { TasksService } from './tasks.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Task]), AuthModule],
+  imports: [AuthModule],
   controllers: [TasksController],
-  providers: [TasksService],
+  providers: [TasksService, PrismaService],
 })
 export class TasksModule {}
